@@ -45,11 +45,12 @@ class ColumnFamilyCache(object):
   does not exist.
   """
 
-  def __init__(self, connectionPool, readCL, writeCL):
+  def __init__(self, connectionPool, readCL, writeCL, credentials):
     self.connectionPool = connectionPool
     self.readCL = readCL
     self.writeCL = writeCL
     self._cache = {}
+    self.credentials = credentials
 
   def batchMutator(self):
     """Create a :clas:`pycassa.Mutator` to use for batch mutations.
@@ -97,7 +98,7 @@ class ColumnFamilyCache(object):
       pass
 
     createTSColumnFamily(self.connectionPool.server_list,
-      self.connectionPool.keyspace, cfName)
+      self.connectionPool.keyspace, cfName, self.credentials)
     return self.get(cfName)
 
 
@@ -113,14 +114,16 @@ class DataTree(object):
   def __init__(self, root, keyspace, server_list,
     read_consistency_level=ConsistencyLevel.ONE,
     write_consistency_level=ConsistencyLevel.ONE, 
-    localDCName=None):
+    localDCName=None,
+    credentials):
 
-    self.cassandra_connection = ConnectionPool(keyspace, server_list)
+    self.cassandra_connection = ConnectionPool(keyspace, server_list, credentials=credentials)
     self.cfCache = ColumnFamilyCache(self.cassandra_connection,
-      read_consistency_level, write_consistency_level)
+      read_consistency_level, write_consistency_level, credentials)
     self.root = root
     self._nodeCache = NodeCache()
     self.localDCName = localDCName
+    self.credentials = credentials
     
   def __repr__(self):
     return "<DataTree[0x%x]: %s>" % (id(self), self.root)
@@ -1109,9 +1112,9 @@ def setDefaultSliceCachingBehavior(behavior):
 
 
 def initializeTableLayout(keyspace, server_list, replicationStrategy, 
-  strategyOptions, localDCName):
+  strategyOptions, localDCName, credentials):
 
-    sys_manager = SystemManager(server_list[0])
+    sys_manager = SystemManager(server_list[0], credentials=credentials)
 
     # Make sure the the keyspace exists
     if keyspace not in sys_manager.list_keyspaces():
@@ -1144,14 +1147,14 @@ def initializeTableLayout(keyspace, server_list, replicationStrategy,
         default_validation_class=pycassa_types.LongType()      
       )
   
-def createTSColumnFamily(servers, keyspace, tableName):
+def createTSColumnFamily(servers, keyspace, tableName, credentials=None):
   """Create a tsXX Column Family using one of the servers in the ``servers``
   list and the ``keysapce`` and ``tableName``.
   """
 
   for server in servers:
     try:
-      SystemManager(server).create_column_family(
+      SystemManager(server, credentials=credentials).create_column_family(
           keyspace,
           tableName,
           super=False,

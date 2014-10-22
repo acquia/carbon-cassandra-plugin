@@ -27,6 +27,11 @@ class CarbonCassandraDatabase(object):
     keyspace = cassandra_settings.get('KEYSPACE')
     servers = cassandra_settings.get('SERVERS')
     servers = [x.strip() for x in servers.split(',')]
+    credentials = None
+    username = cassandra_settings.get('USERNAME')
+    password = cassandra_settings.get('PASSWORD')
+    if username and password:
+      credentials = {'username': username, 'password': password}
 
     # only regex word chars are allowed in the CF name
     dc_name = re.sub("\W", "_", cassandra_settings.get("LOCAL_DC_NAME")) 
@@ -34,10 +39,10 @@ class CarbonCassandraDatabase(object):
     carbon_cassandra_db.initializeTableLayout(keyspace, servers, 
       cassandra_settings.get("REPLICATION_STRATEGY"), 
       json.loads(cassandra_settings.get("STRATEGY_OPTIONS")), 
-      dc_name)
+      dc_name, credentials)
 
     self.tree = carbon_cassandra_db.DataTree(self.data_dir, keyspace, servers, 
-      localDCName=dc_name)
+      localDCName=dc_name, credentials)
 
     if behavior:
       carbon_cassandra_db.setDefaultSliceCachingBehavior(behavior)
