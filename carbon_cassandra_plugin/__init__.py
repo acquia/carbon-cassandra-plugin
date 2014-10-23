@@ -42,7 +42,7 @@ class CarbonCassandraDatabase(object):
       dc_name, credentials)
 
     self.tree = carbon_cassandra_db.DataTree(self.data_dir, keyspace, servers, 
-      localDCName=dc_name, credentials)
+      localDCName=dc_name, credentials=credentials)
 
     if behavior:
       carbon_cassandra_db.setDefaultSliceCachingBehavior(behavior)
