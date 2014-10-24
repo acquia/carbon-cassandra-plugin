@@ -39,7 +39,7 @@ class CarbonCassandraDatabase(object):
     carbon_cassandra_db.initializeTableLayout(keyspace, servers, 
       cassandra_settings.get("REPLICATION_STRATEGY"), 
       json.loads(cassandra_settings.get("STRATEGY_OPTIONS")), 
-      dc_name, credentials)
+      dc_name, credentials=credentials)
 
     self.tree = carbon_cassandra_db.DataTree(self.data_dir, keyspace, servers, 
       localDCName=dc_name, credentials=credentials)
