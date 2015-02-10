@@ -24,7 +24,7 @@ import itertools
 import logging
 import os
 import sys
-
+import re
 import pycassa
 from pycassa import ConnectionPool, ColumnFamily, NotFoundException
 from pycassa.cassandra.ttypes import ConsistencyLevel
@@ -259,10 +259,40 @@ class DataTree(object):
       Returns a list of the form [ (path, is_metric), ], includes the node 
       identified by query.
     """
+    #Returns a list of RE object which can be matched against. See _path_q()
+    def _path_re(part):
+      return re.compile("^%s$" % part.replace('*', '.*'))
+
+    #Returns a list of RE object which can be matched against, splitting the query on '.'
+    def _path_q(query):
+      return map(_path_re, query.split('.'))
+
+    #Returns true if the path exactly matches the query.
+    def _matches(query_re_parts, path):
+      path_parts = path.split('.')
+      return ((len(query_re_parts) == len(path_parts)) and all((map(re.match,query_re_parts, path_parts))))
+
+    #Returns true when path is a prefix of our query. "A.B" is a prefix to "A.B.C"
+    #Splitting the query outside this method allows us to finely control what it is checking.
+    def _is_prefix(query_re_parts, path):
+      path_parts = path.split('.')[:len(query_re_parts)]
+      return (len(path_parts)<=len(query_re_parts)) and all(map(re.match, query_re_parts[:len(path_parts)], path_parts))
+
+    #Returns true if any of the wildcard characters are present in string.
+    def _query_contains_wildcards(q):
+      wildcards = ['*','?','[','(']
+      return any(wildcard in q for wildcard in wildcards)
+
+    #Replace all occurrences of tokens concerning groups.
+    def _fix_wildcard_groups(q):
+      q = q.replace('{', '(')
+      q = q.replace('}', ')')
+      q = q.replace(',', '|')
+      return q
 
     # TODO: this function has grown, maybe the token slices should be 
     # split out. 
-    
+
     if dcName == True:
       if not self.localDCName:
         raise ValueError("dcName set to True, but localDCName not set")
@@ -276,26 +306,65 @@ class DataTree(object):
       raise ValueError("query can not be specified with startToken and "\
         "endToken")
 
+    #If query ends with '*', only remove trailing '*' if query doesn't contain any other wildcards
     if query == '*':
       query = 'root'
-    elif query:
-      query = query.replace('.*', '')
+    elif query.endswith('*') and query[-2] == '.':
+      if not _query_contains_wildcards(query[:-2]):
+        query = query[:-2]
 
-    def _genAll():
-      """Generator to yield (key, col, value) triples from reading a row 
-      in the nodes CF.
-      
-      The query is the row key.
+    if '{' in query:
+      query = _fix_wildcard_groups(query)
+
+    def _genAllWithWildcards(child_nodes=[]):
+      """Generator to yield (key, col, value) triples.
+
+        The query is the row key.
       """
-      # read all rows in the CF
-      try:
-        cols = self.cfCache.get(cfName).get(query)
-      except (NotFoundException):
-        pass
+      def _get(query):
+        try:
+          cols = self.cfCache.get(cfName).get(query)
+        except (NotFoundException):
+          pass
+        else:
+          for col, value in cols.iteritems():
+            yield (query, col, value)
+
+      query_split = query.split('.')
+      query_re_parts = _path_q(query)
+      #Find the first occurrence of a wildcard l->r. This will be our level param below.
+      #Start with the assumption that query doesn't contain wildcards.
+      first_occ = len(query_split)
+      for i,s in enumerate(query_split):
+        if _query_contains_wildcards(s):
+          first_occ = i
+          break
+
+      #Adds matching child nodes
+      def _metric_lookup(query_split, query_re, level, child_nodes):
+        possibles = _get(".".join(query_split[:level]))
+        for key,col,value in possibles:
+          #Append metric which matches our query exactly.
+          if value == "metric" and _matches(query_re, col):
+            child_nodes.append((col, "metric", "true"))
+          #Found a matching branch node. Process children.
+          elif _is_prefix(query_re, col):
+            if level >= len(query_split):
+              #We've reached a branch node. Append and move on.
+              child_nodes.append((key,col,value))
+              continue
+            _metric_lookup(col.split('.'), query_re, level+1, child_nodes)
+
+      #No need to bother looking recursively when query is for root
+      #Also, "root" will not be a literal match against most metrics using RE.
+      if query == "root":
+        child_nodes = _get(query)
       else:
-        for col, value in cols.iteritems():
-          yield (query, col, value)
-    
+        _metric_lookup(query_split, query_re_parts, first_occ, child_nodes)
+
+      for i in child_nodes:
+        yield i
+
     def _genRange():
       """Generator to yield (key, col, value) triples from reading a 
       range of rows in the nodes CF."""
@@ -314,8 +383,8 @@ class DataTree(object):
         if cols.get("metric") == "true":
           yield (key, "metric", "true")
 
-    colsIter = _genRange() if startToken else _genAll()
-    
+    colsIter = _genRange() if startToken else _genAllWithWildcards()
+
     childs = []
     for key, col, value in colsIter:
       if col == 'metric' and value == 'true':
