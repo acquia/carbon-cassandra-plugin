@@ -134,7 +134,7 @@ class DataTree(object):
 
   def __init__(self, root, keyspace, server_list,
     read_consistency_level=ConsistencyLevel.ONE,
-    write_consistency_level=ConsistencyLevel.ONE, 
+    write_consistency_level=ConsistencyLevel.ONE,
     localDCName=None,
     credentials=None):
 
@@ -145,14 +145,14 @@ class DataTree(object):
     self._nodeCache = NodeCache()
     self.localDCName = localDCName
     self.credentials = credentials
-    
+
   def __repr__(self):
     return "<DataTree[0x%x]: %s>" % (id(self), self.root)
   __str__ = __repr__
 
   def hasNode(self, nodePath):
     """Returns whether the Ceres tree contains the given metric"""
-    
+
     existing = self._nodeCache.get(nodePath)
     if existing is not None:
       return True
@@ -172,14 +172,14 @@ class DataTree(object):
 
     :returns: A single :cls:`DataNode` or dict as above.
     """
-    
+
     single = False
     if isinstance(nodePath, basestring):
       searchNodes = [nodePath,]
       single = True
     else:
       searchNodes = list(nodePath)
-    
+
     missingNodes = []
     foundNodes = {}
     for path in searchNodes:
@@ -195,7 +195,7 @@ class DataTree(object):
         return foundNodes.values()[0]
       else:
         return foundNodes
-      
+
     for node in DataNode.fromDB(self, missingNodes):
       self._nodeCache.add(node.nodePath, node)
       foundNodes[node.nodePath] = node
@@ -240,65 +240,65 @@ class DataTree(object):
     node.write(datapoints)
     return
 
-  def selfAndChildPaths(self, query, dcName=None, startToken=None, 
+  def selfAndChildPaths(self, query, dcName=None, startToken=None,
     endToken=None):
     """Get a list of the self and childs nodes under the `query`.
-     
+
       Think of it in terms of a glob:
         - * at the top of the tree should return all of the root-level nodes
         - carbon.* should return anything that begins with carbon, but *only*
           replacing .* with the actual value:
           ex. carbon.metrics.
               carbon.tests.
-      
-      If `dcName` is specified only paths created by daemons running in the 
-      given Cassandra Data Centre are returned. The daemons are configured 
-      with a Data Centre node in db.conf. If True is passed the localDCName 
-      passed when the DataTree was created is used. 
-       
-      Returns a list of the form [ (path, is_metric), ], includes the node 
+
+      If `dcName` is specified only paths created by daemons running in the
+      given Cassandra Data Centre are returned. The daemons are configured
+      with a Data Centre node in db.conf. If True is passed the localDCName
+      passed when the DataTree was created is used.
+
+      Returns a list of the form [ (path, is_metric), ], includes the node
       identified by query.
     """
-    #Returns a list of RE object which can be matched against. See _path_q()
+    # Returns a list of RE object which can be matched against. See _path_q()
     def _path_re(part):
       return re.compile("^%s$" % part.replace('*', '.*'))
 
-    #Returns a list of RE object which can be matched against, splitting the query on '.'
+    # Returns a list of RE object which can be matched against, splitting the query on '.'
     def _path_q(query):
       return map(_path_re, query.split('.'))
 
-    #Returns true if the path exactly matches the query.
+    # Returns true if the path exactly matches the query.
     def _matches(query_re_parts, path):
       path_parts = path.split('.')
-      return ((len(query_re_parts) == len(path_parts)) and all((map(re.match,query_re_parts, path_parts))))
+      return ((len(query_re_parts) == len(path_parts)) and all((map(re.match, query_re_parts, path_parts))))
 
-    #Returns true when path is a prefix of our query. "A.B" is a prefix to "A.B.C"
-    #Splitting the query outside this method allows us to finely control what it is checking.
+    # Returns true when path is a prefix of our query. "A.B" is a prefix to "A.B.C"
+    # Splitting the query outside this method allows us to finely control what it is checking.
     def _is_prefix(query_re_parts, path):
       path_parts = path.split('.')[:len(query_re_parts)]
-      return (len(path_parts)<=len(query_re_parts)) and all(map(re.match, query_re_parts[:len(path_parts)], path_parts))
+      return (len(path_parts) <= len(query_re_parts)) and all(map(re.match, query_re_parts[:len(path_parts)], path_parts))
 
-    #Returns true if any of the wildcard characters are present in string.
+    # Returns true if any of the wildcard characters are present in string.
     def _query_contains_wildcards(q):
-      wildcards = ['*','?','[','(']
+      wildcards = ['*', '?', '[', '(']
       return any(wildcard in q for wildcard in wildcards)
 
-    #Replace all occurrences of tokens concerning groups.
+    # Replace all occurrences of tokens concerning groups.
     def _fix_wildcard_groups(q):
       q = q.replace('{', '(')
       q = q.replace('}', ')')
       q = q.replace(',', '|')
       return q
 
-    # TODO: this function has grown, maybe the token slices should be 
-    # split out. 
+    # TODO: this function has grown, maybe the token slices should be
+    # split out.
 
     if dcName == True:
       if not self.localDCName:
         raise ValueError("dcName set to True, but localDCName not set")
       dcName = self.localDCName
-    cfName = "dc_%s_nodes" % (dcName,) if dcName else "global_nodes" 
-    
+    cfName = "dc_%s_nodes" % (dcName,) if dcName else "global_nodes"
+
     if bool(startToken) != bool(endToken):
       raise ValueError("None or both of startToken and endToken must be "\
         "specified.")
@@ -306,21 +306,23 @@ class DataTree(object):
       raise ValueError("query can not be specified with startToken and "\
         "endToken")
 
-    #If query ends with '*', only remove trailing '*' if query doesn't contain any other wildcards
+    # If query ends with '*', only remove trailing '*' if query doesn't contain any other wildcards
     if query == '*':
       query = 'root'
     elif query.endswith('*') and query[-2] == '.':
-      if not _query_contains_wildcards(query[:-2]):
+      if _query_contains_wildcards(query[:-2]):
         query = query[:-2]
 
     if '{' in query:
       query = _fix_wildcard_groups(query)
 
-    def _genAllWithWildcards(child_nodes=[]):
+    def _genAllWithWildcards():
       """Generator to yield (key, col, value) triples.
 
         The query is the row key.
       """
+      child_nodes = []
+
       def _get(query):
         try:
           cols = self.cfCache.get(cfName).get(query)
@@ -332,32 +334,33 @@ class DataTree(object):
 
       query_split = query.split('.')
       query_re_parts = _path_q(query)
-      #Find the first occurrence of a wildcard l->r. This will be our level param below.
-      #Start with the assumption that query doesn't contain wildcards.
+
+      # Find the first occurrence of a wildcard l->r. This will be our level param below.
+      # Start with the assumption that query doesn't contain wildcards.
       first_occ = len(query_split)
-      for i,s in enumerate(query_split):
+      for i, s in enumerate(query_split):
         if _query_contains_wildcards(s):
           first_occ = i
           break
 
-      #Adds matching child nodes
+      # Adds matching child nodes
       def _metric_lookup(query_split, query_re, level, child_nodes):
         possibles = _get(".".join(query_split[:level]))
-        for key,col,value in possibles:
-          #Append metric which matches our query exactly.
+        for key, col, value in possibles:
+          # Append metric which matches our query exactly.
           if value == "metric" and _matches(query_re, col):
             child_nodes.append((col, "metric", "true"))
-          #Found a matching branch node. Process children.
+          # Found a matching branch node. Process children.
           elif _is_prefix(query_re, col):
             if level >= len(query_split):
-              #We've reached a branch node. Append and move on.
-              child_nodes.append((key,col,value))
+              # We've reached a branch node. Append and move on.
+              child_nodes.append((key, col, value))
               continue
             _metric_lookup(col.split('.'), query_re, level+1, child_nodes)
 
-      #No need to bother looking recursively when query is for root
-      #Also, "root" will not be a literal match against most metrics using RE.
-      if query == "root":
+      # No need to bother looking recursively when query is for root
+      # Also, "root" will not be a literal match against most metrics using RE.
+      if query == "root" or not _query_contains_wildcards(query):
         child_nodes = _get(query)
       else:
         _metric_lookup(query_split, query_re_parts, first_occ, child_nodes)
@@ -366,19 +369,19 @@ class DataTree(object):
         yield i
 
     def _genRange():
-      """Generator to yield (key, col, value) triples from reading a 
+      """Generator to yield (key, col, value) triples from reading a
       range of rows in the nodes CF."""
-      # only read rows in the specified token range. 
+      # only read rows in the specified token range.
       # returns a generator, no NotFoundExceptions
-      # generator batches request to pull cf.buffer_size rows per 
+      # generator batches request to pull cf.buffer_size rows per
       # cassandra call.
-      rangeIter = self.cfCache.get(cfName).get_range(start_token=startToken, 
+      rangeIter = self.cfCache.get(cfName).get_range(start_token=startToken,
         finish_token=endToken)
 
-      # we may get duplicate entries because a data node will have it's 
-      # own row and be a column in it's parents row. 
-      # HACK: skip rows that have child data nodes, this is wasteful but the  
-      # alternative is to only record data nodes that are metrics in each DC. 
+      # we may get duplicate entries because a data node will have it's
+      # own row and be a column in it's parents row.
+      # HACK: skip rows that have child data nodes, this is wasteful but the
+      # alternative is to only record data nodes that are metrics in each DC.
       for key, cols in rangeIter:
         if cols.get("metric") == "true":
           yield (key, "metric", "true")
@@ -397,27 +400,27 @@ class DataTree(object):
         # this is a branch node
         childs.append((col, False))
     return childs
-    
+
 def _retentionsFromCSV(csv):
     """Parse the command separated ints in `csv` into a list of tuples
-    
+
     Used to deserialise the retention policy.
     """
-    
+
     ints = map(int, csv.split(','))
     return zip(ints[::2], ints[1::2])
-  
+
 def _retentionsToCSV(retentions):
     """Parse the list of int tuples [(1,2),] into a comma separated string
-    
+
     used to serialise the retention policy
     """
-    
+
     return ",".join(
       str(i)
       for i in itertools.chain.from_iterable(retentions)
     )
-    
+
 class DataNode(object):
   """Represents a single Ceres metric.
 
@@ -430,7 +433,7 @@ class DataNode(object):
   __slots__ = ('tree', 'nodePath', 'fsPath',
                'metadataFile', 'timeStep',
                'sliceCache', 'sliceCachingBehavior', 'cassandra_connection',
-               '_meta_data', "cfCache", "_deserialise", 
+               '_meta_data', "cfCache", "_deserialise",
                "_serialise")
 
   _deserialise = {
@@ -448,7 +451,7 @@ class DataNode(object):
     "timeStep" : lambda x : str(x),
     "xFilesFactor" : lambda x : str(x),
   }
-  
+
   def __init__(self, tree, meta_data, nodePath):
     self.tree = tree
     self.cfCache = tree.cfCache
@@ -484,38 +487,38 @@ class DataNode(object):
 
   @classmethod
   def fromDB(cls, tree, nodePaths):
-    """Read the nodes for the `nodePaths` list from the DB and return a 
+    """Read the nodes for the `nodePaths` list from the DB and return a
     list of :cls:`DataNode`s.
     """
-    
-    rows = tree.cfCache.get("metadata").multiget(nodePaths, 
+
+    rows = tree.cfCache.get("metadata").multiget(nodePaths,
       columns=cls._deserialise.keys())
-    
+
     def _unknownCol(x):
       raise RuntimeError("Cannot deserilaise unknown column %s" % (x))
-      
+
     nodes = []
     for rowKey, rowCols in rows.iteritems():
-      
+
       metadata = {
         colName : cls._deserialise.get(colName, _unknownCol)(colValue)
         for colName, colValue in rowCols.iteritems()
       }
       nodes.append(cls(tree, metadata, rowKey))
     return nodes
-    
+
   @classmethod
   def exists(cls, tree, nodePath):
     """Returns True if the node at `nodepath` exists, False otherwise.
     """
-    
+
     try:
       # Faster to read a named column
       tree.cfCache.get("metadata").get(nodePath, columns=["timeStep"])
       return True
     except (NotFoundException):
        return False
-    
+
   @property
   def slice_info(self):
     return [
@@ -533,20 +536,20 @@ class DataNode(object):
       # Cut off partial seconds.
       metadata['startTime'] = int(time.time())
     self._meta_data.update(metadata)
-    
+
     def _unknownCol(x):
       raise RuntimeError("Cannot deserilaise unknown collumn %s" % (x))
-      
+
     cols = {
       metaName : self._serialise.get(metaName, _unknownCol)(metaValue)
       for metaName, metaValue in self._meta_data.iteritems()
     }
-    
+
     self.tree.cfCache.get("metadata").insert(self.nodePath, cols)
 
   @property
   def slices(self):
-    
+
     # What happens when the sliceCache is null
     if self.sliceCache:
       if self.sliceCachingBehavior == 'all':
@@ -599,39 +602,39 @@ class DataNode(object):
           self.sliceCachingBehavior,))
 
   def readSlices(self):
-    """Get's a list of the slices available for this metric. 
-    
-    A slice has a start time and a time step, e.g. start at 9:00AM with 60 
-    second precision. 
-    
+    """Get's a list of the slices available for this metric.
+
+    A slice has a start time and a time step, e.g. start at 9:00AM with 60
+    second precision.
+
     Returns a list of [ (startTime, timeStep)]
     """
-    
-    # TODO: can / should this be cached ? 
+
+    # TODO: can / should this be cached ?
     # Read the timeSteps we have for this node
     key = self.nodePath
     try:
-      nodeSlicesCols = self.cfCache.get("node_slices").get(key, 
+      nodeSlicesCols = self.cfCache.get("node_slices").get(key,
         column_count=1000)
     except (NotFoundException) as e:
       return []
-    
+
     # call to Cassandra to get the startTime for each timeStep
     slices = []
     for timeStep, defaultStartTime in nodeSlicesCols.iteritems():
-      
+
       try:
         cols = self.cfCache.getTS("ts{0}".format(timeStep)).get(key, column_count=1)
       except (NotFoundException) as e:
-        # no data for this time slice yet, but we have it exists because we 
+        # no data for this time slice yet, but we have it exists because we
         # have it in node_slices
         slices.append((defaultStartTime, timeStep))
       else:
         slices.append((cols.keys()[0], timeStep))
-    
+
     slices.sort(reverse=True)
     return slices
-    
+
   def setSliceCachingBehavior(self, behavior):
     behavior = behavior.lower()
     if behavior not in ('none', 'all', 'latest'):
@@ -663,17 +666,17 @@ class DataNode(object):
 
     if self.timeStep is None:
       self.readMetadata()
-      
+
     origFromTime = fromTime
     origUntilTime = untilTime
-    
+
     # Normalise here so incase there are not slices
     # will normalise again in the loop
-    fromTime = int(origFromTime - (origFromTime % self.timeStep) 
+    fromTime = int(origFromTime - (origFromTime % self.timeStep)
       + self.timeStep)
-    untilTime = int(origUntilTime - (origUntilTime % self.timeStep) 
+    untilTime = int(origUntilTime - (origUntilTime % self.timeStep)
       + self.timeStep)
-    
+
     sliceBoundary = None  # to know when to split up queries across slices
     resultValues = []
     earliestData = None
@@ -681,11 +684,11 @@ class DataNode(object):
     for dataSlice in self.slices:
       # Normalize the timestamps to fit proper intervals
       # NOTE: this is different to ceres, it normalises using the nodes
-      # timeStamp which results in a mis match when trying to None pad 
+      # timeStamp which results in a mis match when trying to None pad
       # dataPoints in TimsSeriesData because the timestamp do not match
-      fromTime = int(origFromTime - (origFromTime % dataSlice.timeStep) 
+      fromTime = int(origFromTime - (origFromTime % dataSlice.timeStep)
         + dataSlice.timeStep)
-      untilTime = int(origUntilTime - (origUntilTime % dataSlice.timeStep) 
+      untilTime = int(origUntilTime - (origUntilTime % dataSlice.timeStep)
         + dataSlice.timeStep)
 
       # if the requested interval starts after the start of this slice
@@ -733,7 +736,7 @@ class DataNode(object):
       missing = int(untilTime - fromTime) / seriesTimestep
       resultValues = [None for i in range(missing)]
     else:
-      # Left pad nulls if the start of the requested interval 
+      # Left pad nulls if the start of the requested interval
       # predates all slices
       # use the timestamp from the last DataSlice we looked at.
       seriesTimestep = dataSlice.timeStep
@@ -750,7 +753,7 @@ class DataNode(object):
   def _write_internal(self, datapoints, batch):
     """Write the ``datapoints`` to the db using the ``batch`` mutator.
     """
-      
+
     if self.timeStep is None:
       self.readMetadata()
 
@@ -807,9 +810,9 @@ class DataNode(object):
 
         if not sequence:
           break
-        
+
         sliceBoundary = slice.startTime
-        
+
       else: # this else if for the `for slice in self.slices` above
         needsEarlierSlice.append(sequence)
 
@@ -873,16 +876,16 @@ class DataSlice(object):
 
     # TODO: pull from cache within DataNode.readMetadata
     metadata = self.node.readMetadata()
-    # retentions should be [ (timestep, retention )], e.g. (5,24) is a 
+    # retentions should be [ (timestep, retention )], e.g. (5,24) is a
     # 5 second timestep with 24 values stored (i.e. 2 minutes)
     retentions = list(metadata['retentions'])
-    
+
     # ensure it is sorted by increasing timestep
     retentions.sort(key=lambda x: x[0])
     # find the first retention pair after me
-    # if this is the last timestep in the config ok to use my own retention 
+    # if this is the last timestep in the config ok to use my own retention
     # as nothing will be rolling up this timestep
-    pos = min(bisect_right(retentions, (self.timeStep, sys.maxint)), 
+    pos = min(bisect_right(retentions, (self.timeStep, sys.maxint)),
       len(retentions)-1)
     next_timestep, next_retention = retentions[pos]
     # 50% fudge factor because we want the data to be there when the rollup
@@ -911,34 +914,34 @@ class DataSlice(object):
 
   @property
   def endTime(self):
-    """Returns the end time for the data slice. 
-    
-    Returns Java long.MAX_VALUE because our data slices in Cassandra have 
-    no end time to them. AFAI in Ceres they have an end time because they 
-    it's a file based system and they want to delete files. 
+    """Returns the end time for the data slice.
+
+    Returns Java long.MAX_VALUE because our data slices in Cassandra have
+    no end time to them. AFAI in Ceres they have an end time because they
+    it's a file based system and they want to delete files.
     """
     return 9223372036854775807
-    
-    
+
+
   @classmethod
   def create(cls, node, startTime, timeStep):
     dataSlice = cls(node, startTime, timeStep)
-    # Record that there is a data slice for this node 
-    # Only records the timeStep there as the start time depends on the 
+    # Record that there is a data slice for this node
+    # Only records the timeStep there as the start time depends on the
     # data we have in the tsXX row.
     key = node.nodePath
     cols = {
       dataSlice.timeStep : startTime
     }
     dataSlice.cfCache.get("node_slices").insert(key, cols)
-    
+
     return dataSlice
 
   def read(self, fromTime, untilTime):
     """Return :cls:`TimeSeriesData` for this DataSlice, between ``fromTime``
     and ``untilTime``
     """
-    
+
     timeOffset = int(fromTime) - self.startTime
 
     if timeOffset < 0:
@@ -955,31 +958,31 @@ class DataSlice(object):
                           column_count=1999999999)
     except (NotFoundException) as e:
       raise NoData()
-    
-    return TimeSeriesData.fromDB(fromTime, untilTime, self.timeStep, 
+
+    return TimeSeriesData.fromDB(fromTime, untilTime, self.timeStep,
       cols.items())
-    
+
   def insert_metric(self, metric, isMetric=False, batch=None):
     """Insert the ``metric`` into the global_nodes CF to say it's a
     metric as opposed to a non leaf node."""
-    
+
     myBatch = False
     if batch is None:
       batch = self.cfCache.batchMutator()
       myBatch = True
-      
+
     split = metric.split('.')
     if len(split) == 1:
       batch.insert(self.cfCache.get("global_nodes"), 'root',
         { metric : '' })
       # Record the DC this node was created in, used to segment rollups
-      if self.node.tree.localDCName: 
+      if self.node.tree.localDCName:
           batch.insert(self.cfCache.get("dc_%s_nodes" % (
             self.node.tree.localDCName,)), "root", { metric : '' })
       else:
         # TODO: log a WARN that we do not know where this node was created
         pass
-        
+
     else:
       next_metric = '.'.join(split[0:-1])
       metric_type =  'metric' if isMetric else ''
@@ -988,14 +991,14 @@ class DataSlice(object):
       # Record the DC this node was created in, used to segment rollups
       if self.node.tree.localDCName:
         batch.insert(self.cfCache.get("dc_%s_nodes" % (
-          self.node.tree.localDCName,)), next_metric, 
+          self.node.tree.localDCName,)), next_metric,
           {'.'.join(split) : metric_type })
       else:
         # TODO: log a WARN that we do not know where this node was created
         pass
-        
+
       self.insert_metric(next_metric, batch=batch)
-    
+
     if myBatch:
       batch.send()
     return
@@ -1004,12 +1007,12 @@ class DataSlice(object):
     """Write the ``sequence`` of metrics into the the tsXX CF for this
     DataSlice, using the ``batch`` mutator.
     """
-    
+
     myBatch = False
     if batch is None:
       batch = self.cfCache.batchMutator()
       myBatch = True
-    
+
     # Write the data points to the tsXX table
     key = self.nodePath
     cols = {
@@ -1017,37 +1020,37 @@ class DataSlice(object):
       for timestamp, value in sequence
     }
     tsCF = self.cfCache.getTS("ts{0}".format(self.timeStep))
-    # The roll up process relies of reading data from a fine archive that has 
-    # overflowed, this data is then selected to fill the corse archive. 
+    # The roll up process relies of reading data from a fine archive that has
+    # overflowed, this data is then selected to fill the corse archive.
     # e.g. with 5s:2m,1m:5m / retentions 5,24,60,5
-    # a rollup started at 01:09:28 will read from the ts5 slice between the 
-    # start of the slice and 2014-02-11 01:07:30. Data before 
-    # 2014-02-11 01:07:30 is considered overflow data. 
+    # a rollup started at 01:09:28 will read from the ts5 slice between the
+    # start of the slice and 2014-02-11 01:07:30. Data before
+    # 2014-02-11 01:07:30 is considered overflow data.
     #
-    # It then cycles through the rentions in the course archive (ts60) 
-    # selecting data from the overflow points that match. 
-    # The window for the coarse archive ends at the time the fine archive 
-    # starts and goes back in time (precision * retention) so starts at 
+    # It then cycles through the rentions in the course archive (ts60)
+    # selecting data from the overflow points that match.
+    # The window for the coarse archive ends at the time the fine archive
+    # starts and goes back in time (precision * retention) so starts at
     # 2014-02-11 01:02:00 and ends at 2014-02-11 01:07:00
     #
-    # In this case it will look for data points from the overflow data in the  
-    # bounds: 
+    # In this case it will look for data points from the overflow data in the
+    # bounds:
     # 2014-02-11 01:02:00 to 2014-02-11 01:03:00
     # 2014-02-11 01:03:00 to 2014-02-11 01:04:00
     # 2014-02-11 01:04:00 to 2014-02-11 01:05:00
     # 2014-02-11 01:05:00 to 2014-02-11 01:06:00
     # 2014-02-11 01:06:00 to 2014-02-11 01:07:00
-    # 
-    # The aggregate value created from each of those selections from the 
-    # over flow will **overwrite** the value on disk for the ts60 slice. 
-    # 
-    # So we need to have enough data on disk for the ts5 slice to fill all the 
-    # retentions for the ts60 slice. In this case we need 5 minutes of 
-    # overflow data in the ts5 slice, this is on top of the 2 minutes of 
-    # data the ts5 slice retains.  And so forth, for the last slice 
-    # we only need to keep the data on disk for the length of it's rentention. 
+    #
+    # The aggregate value created from each of those selections from the
+    # over flow will **overwrite** the value on disk for the ts60 slice.
+    #
+    # So we need to have enough data on disk for the ts5 slice to fill all the
+    # retentions for the ts60 slice. In this case we need 5 minutes of
+    # overflow data in the ts5 slice, this is on top of the 2 minutes of
+    # data the ts5 slice retains.  And so forth, for the last slice
+    # we only need to keep the data on disk for the length of it's rentention.
     batch.insert(tsCF, key, cols, ttl=self.ttl)
-    
+
     # Make sure this node in the data tree is marked as a metric.
     dataTreeCF = self.cfCache.get("global_nodes")
     batch.insert(dataTreeCF, key, {'metric' : 'true'})
@@ -1058,9 +1061,9 @@ class DataSlice(object):
     else:
       # TODO: log a WARN that we do not know where this node was created
       pass
-      
+
     self.insert_metric(key, True, batch=batch)
-    
+
     if myBatch:
       batch.send()
     return
@@ -1078,23 +1081,23 @@ class TimeSeriesData(object):
     self.endTime = endTime
     self.timeStep = timeStep
     self.values = values
-  
+
   @classmethod
   def fromDB(cls, startTime, endTime, timeStep, dataPoints):
-    """Create a new instance using the `dataPoints` list of 
+    """Create a new instance using the `dataPoints` list of
     (col, value) / (timestamp, value) tuples.
-    
-    Cassandra is a sparse store, we store the time and value of the data 
-    point. Ceres (and I guess whisper) are fixed, the CeresSlice will pad out 
-    zero entries when data is missing. It will even refuse to write to 
-    a particular CeresSlice if too many zero pads would be added. 
-    
-    Other code in the rollups expects the TimeSeries to not contain any gaps. 
-    
-    To keep things simple we fill pad missing values with None when 
-    constructing a new TimeSeries. 
+
+    Cassandra is a sparse store, we store the time and value of the data
+    point. Ceres (and I guess whisper) are fixed, the CeresSlice will pad out
+    zero entries when data is missing. It will even refuse to write to
+    a particular CeresSlice if too many zero pads would be added.
+
+    Other code in the rollups expects the TimeSeries to not contain any gaps.
+
+    To keep things simple we fill pad missing values with None when
+    constructing a new TimeSeries.
     """
-    
+
     def _safeIter(baseIter, emptyValue):
       while True:
         try:
@@ -1103,16 +1106,16 @@ class TimeSeriesData(object):
           yield emptyValue
 
     # expected time stamps
-    timestampIter = _safeIter(iter(xrange(startTime, endTime, timeStep)), 
+    timestampIter = _safeIter(iter(xrange(startTime, endTime, timeStep)),
       None)
     thisTimestamp = timestampIter.next()
-    
+
     dbIter = _safeIter(iter(dataPoints), (None, None) )
     dbTimestamp, dbValue = dbIter.next()
-    
+
     values = []
     while thisTimestamp is not None:
-      
+
       if thisTimestamp == dbTimestamp:
         # match between expected timestamp and db value
         values.append(dbValue)
@@ -1125,23 +1128,23 @@ class TimeSeriesData(object):
         values.append(None)
         thisTimestamp = timestampIter.next()
       else:
-        # db timestamp is behind the expected timestamp, or the DB timestamp 
+        # db timestamp is behind the expected timestamp, or the DB timestamp
         # is None
         # Happens when we do not have enough db data to fill the
         # period.
-        # pad with none and advance to the next expected timestamp 
+        # pad with none and advance to the next expected timestamp
         values.append(None)
         thisTimestamp = timestampIter.next()
-    
+
     # we should have exhausted the db iterator
     dbTimestamp, dbValue = dbIter.next()
     if not dbTimestamp is None:
       raise RuntimeError("Failed to exhaust the DB values, first overflow "\
-        "is %s,%s for startTime %s endTime %s timeStep %s" % (dbTimestamp, 
+        "is %s,%s for startTime %s endTime %s timeStep %s" % (dbTimestamp,
         dbValue, startTime, endTime, timeStep))
-    
+
     return cls(startTime, endTime, timeStep, values)
-    
+
   @property
   def timestamps(self):
     return xrange(self.startTime, self.endTime, self.timeStep)
@@ -1201,32 +1204,32 @@ def setDefaultSliceCachingBehavior(behavior):
   DEFAULT_SLICE_CACHING_BEHAVIOR = behavior
 
 
-def initializeTableLayout(keyspace, server_list, replicationStrategy, 
+def initializeTableLayout(keyspace, server_list, replicationStrategy,
   strategyOptions, localDCName, credentials):
 
     sys_manager = SystemManager(server_list[0], credentials=credentials)
 
     # Make sure the the keyspace exists
     if keyspace not in sys_manager.list_keyspaces():
-      sys_manager.create_keyspace(keyspace, replicationStrategy, 
+      sys_manager.create_keyspace(keyspace, replicationStrategy,
         strategyOptions)
-        
+
     cf_defs = sys_manager.get_keyspace_column_families(keyspace)
-    
+
     # Create UTF8 CF's
     for tablename in ["global_nodes", "metadata"]:
       if tablename not in cf_defs.keys():
         createUTF8ColumnFamily(sys_manager, keyspace, tablename)
-    
+
     if localDCName:
-        
+
         dcNodes = "dc_%s_nodes" % (localDCName,)
         if dcNodes not in cf_defs.keys():
           createUTF8ColumnFamily(sys_manager, keyspace, dcNodes)
     else:
       # TODO Log we do not have the DC name
       pass
-      
+
     if "node_slices" not in cf_defs.keys():
       sys_manager.create_column_family(
         keyspace,
@@ -1234,9 +1237,9 @@ def initializeTableLayout(keyspace, server_list, replicationStrategy,
         super=False,
         comparator_type=pycassa_types.LongType(),
         key_validation_class=pycassa_types.UTF8Type(),
-        default_validation_class=pycassa_types.LongType()      
+        default_validation_class=pycassa_types.LongType()
       )
-  
+
 def createTSColumnFamily(servers, keyspace, tableName, credentials=None):
   """Create a tsXX Column Family using one of the servers in the ``servers``
   list and the ``keysapce`` and ``tableName``.
@@ -1259,7 +1262,7 @@ def createTSColumnFamily(servers, keyspace, tableName, credentials=None):
 
   raise RuntimeError("Failed to create CF %s.%s using the server list %s, "\
     "last error was %s" % (keyspace, tableName, servers, str(lastError)))
-  
+
 def createUTF8ColumnFamily(sys_manager, keyspace, tablename):
   """Create column family with UTF8Type comparator, value and key."""
   sys_manager.create_column_family(
