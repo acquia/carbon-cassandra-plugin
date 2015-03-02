@@ -310,7 +310,7 @@ class DataTree(object):
     if query == '*':
       query = 'root'
     elif query.endswith('*') and query[-2] == '.':
-      if _query_contains_wildcards(query[:-2]):
+      if not _query_contains_wildcards(query[:-2]):
         query = query[:-2]
 
     if '{' in query:
