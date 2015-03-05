@@ -309,12 +309,13 @@ class DataTree(object):
     # If query ends with '*', only remove trailing '*' if query doesn't contain any other wildcards
     if query == '*':
       query = 'root'
-    elif query.endswith('*') and query[-2] == '.':
-      if not _query_contains_wildcards(query[:-2]):
-        query = query[:-2]
+    elif query:
+      if query.endswith('*') and query[-2] == '.':
+        if not _query_contains_wildcards(query[:-2]):
+          query = query[:-2]
 
-    if '{' in query:
-      query = _fix_wildcard_groups(query)
+      if '{' in query:
+        query = _fix_wildcard_groups(query)
 
     def _genAllWithWildcards():
       """Generator to yield (key, col, value) triples.
