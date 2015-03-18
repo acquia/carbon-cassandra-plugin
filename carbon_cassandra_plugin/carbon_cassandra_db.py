@@ -887,14 +887,14 @@ class DataSlice(object):
     retentions.sort(key=lambda x: x[0])
     retention = [y for (x, y) in retentions if x == self.timeStep][0]
 
-    # The rollup script should be configured to run within the the *next*
-    # retention period for the metric
+    # The rollup script should be configured to run within the retention period
+    # for the metric
     # As an example if you are working with the retention:
     #   10s:10m, 5m:2d
     # then you should configure the rollup script to run every 10 minutes
     # The 3x TTL scaling factor gives you enough padding so that the rollup
     # script has a 30 minute window to rollup the metric
-    self.ttl = self.timeStep * retention * 3
+    self.ttl = timeStep * retention * 3
 
   def __repr__(self):
     return "<DataSlice[0x%x]: %s>" % (id(self), self.nodePath)
