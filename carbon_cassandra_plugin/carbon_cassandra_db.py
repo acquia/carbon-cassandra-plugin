@@ -145,6 +145,7 @@ class DataTree(object):
     self._nodeCache = NodeCache()
     self.localDCName = localDCName
     self.credentials = credentials
+    self.read_consistency_level = read_consistency_level
 
   def __repr__(self):
     return "<DataTree[0x%x]: %s>" % (id(self), self.root)
@@ -493,7 +494,8 @@ class DataNode(object):
     """
 
     rows = tree.cfCache.get("metadata").multiget(nodePaths,
-      columns=cls._deserialise.keys())
+      columns=cls._deserialise.keys(),
+      read_consistency_level=tree.read_consistency_level)
 
     def _unknownCol(x):
       raise RuntimeError("Cannot deserilaise unknown column %s" % (x))
