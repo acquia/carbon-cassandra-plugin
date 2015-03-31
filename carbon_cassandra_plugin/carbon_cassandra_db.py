@@ -138,7 +138,9 @@ class DataTree(object):
     localDCName=None,
     credentials=None):
 
-    self.cassandra_connection = ConnectionPool(keyspace, server_list, credentials=credentials)
+    self.cassandra_connection = ConnectionPool(keyspace, server_list, credentials=credentials,
+                                               pool_size=len(server_list),
+                                               max_overflow=-1)
     self.cfCache = ColumnFamilyCache(self.cassandra_connection,
       read_consistency_level, write_consistency_level, credentials)
     self.root = root
