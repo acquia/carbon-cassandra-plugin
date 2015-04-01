@@ -336,16 +336,17 @@ class DataTree(object):
           for col, value in cols.iteritems():
             yield (query, col, value)
 
-      query_split = query.split('.')
-      query_re_parts = _path_q(query)
-
-      # Find the first occurrence of a wildcard l->r. This will be our level param below.
-      # Start with the assumption that query doesn't contain wildcards.
-      first_occ = len(query_split)
-      for i, s in enumerate(query_split):
-        if _query_contains_wildcards(s):
-          first_occ = i
-          break
+      def _query_parts_helper(query):
+        query_split = query.split('.')
+        query_re_parts = _path_q(query)
+        # Find the first occurrence of a wildcard l->r. This will be our level param below.
+        # Start with the assumption that query doesn't contain wildcards.
+        first_occ = len(query_split)
+        for i, s in enumerate(query_split):
+          if _query_contains_wildcards(s):
+            first_occ = i
+            break
+        return query_split, query_re_parts, first_occ
 
       # Adds matching child nodes
       def _metric_lookup(query_split, query_re, level, child_nodes):
@@ -356,7 +357,7 @@ class DataTree(object):
             child_nodes.append((col, "metric", "true"))
           # Found a matching branch node. Process children.
           elif _is_prefix(query_re, col):
-            if level >= len(query_split):
+            if level >= len(query_re):
               # We've reached a branch node. Append and move on.
               child_nodes.append((key, col, value))
               continue
@@ -366,7 +367,13 @@ class DataTree(object):
       # Also, "root" will not be a literal match against most metrics using RE.
       if query == "root" or not _query_contains_wildcards(query):
         child_nodes = _get(query)
+      elif query[0] == '*':
+        # We don't prepend our metrics with "root". The extra look up works around that.
+        for key, col, value in _get("root"):
+          query_split, query_re_parts, first_occ = _query_parts_helper(query.replace('*', col, 1))
+          _metric_lookup(query_split, query_re_parts, first_occ, child_nodes)
       else:
+        query_split, query_re_parts, first_occ = _query_parts_helper(query)
         _metric_lookup(query_split, query_re_parts, first_occ, child_nodes)
 
       for i in child_nodes:
