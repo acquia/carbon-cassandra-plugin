@@ -136,11 +136,13 @@ class DataTree(object):
     read_consistency_level=ConsistencyLevel.ONE,
     write_consistency_level=ConsistencyLevel.ONE,
     localDCName=None,
-    credentials=None):
+    credentials=None,
+    pool_size=5,
+    max_overflow=0):
 
     self.cassandra_connection = ConnectionPool(keyspace, server_list, credentials=credentials,
-                                               pool_size=len(server_list),
-                                               max_overflow=-1)
+                                               pool_size=pool_size,
+                                               max_overflow=max_overflow)
     self.cfCache = ColumnFamilyCache(self.cassandra_connection,
       read_consistency_level, write_consistency_level, credentials)
     self.root = root
