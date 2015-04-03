@@ -138,11 +138,13 @@ class DataTree(object):
     localDCName=None,
     credentials=None,
     pool_size=5,
-    max_overflow=0):
+    max_overflow=0,
+    timeout=0.5):
 
     self.cassandra_connection = ConnectionPool(keyspace, server_list, credentials=credentials,
                                                pool_size=pool_size,
-                                               max_overflow=max_overflow)
+                                               max_overflow=max_overflow,
+                                               timeout=timeout)
     self.cfCache = ColumnFamilyCache(self.cassandra_connection,
       read_consistency_level, write_consistency_level, credentials)
     self.root = root
@@ -1259,17 +1261,10 @@ def createTSColumnFamily(servers, keyspace, tableName, credentials=None):
   """Create a tsXX Column Family using one of the servers in the ``servers``
   list and the ``keysapce`` and ``tableName``.
   """
-
   for server in servers:
     try:
-      SystemManager(server, credentials=credentials).create_column_family(
-          keyspace,
-          tableName,
-          super=False,
-          comparator_type=pycassa_types.LongType(),
-          key_validation_class=pycassa_types.UTF8Type(),
-          default_validation_class=pycassa_types.FloatType()
-      )
+      manager = SystemManager(server, credentials=credentials)
+      createUTF8ColumnFamily(manager, keyspace, tableName, ts_table=True)
       return None
     except (Exception) as e:
       # TODO: log when we know how to log
@@ -1278,13 +1273,31 @@ def createTSColumnFamily(servers, keyspace, tableName, credentials=None):
   raise RuntimeError("Failed to create CF %s.%s using the server list %s, "\
     "last error was %s" % (keyspace, tableName, servers, str(lastError)))
 
-def createUTF8ColumnFamily(sys_manager, keyspace, tablename):
+def createUTF8ColumnFamily(sys_manager, keyspace, tablename, ts_table=False):
   """Create column family with UTF8Type comparator, value and key."""
+
+  # Default options for the tree-storage tables
+  kw_options = {'super': False, 'comparator_type': pycassa_types.UTF8Type(),
+                'key_validation_class': pycassa_types.UTF8Type(),
+                'default_validation_class': pycassa_types.UTF8Type()}
+
+  # A ts* table needs to have a bunch of different settings since that's where
+  # the actual data is going to be stored
+  # - Use DTCS compaction to delete old data (requires 2.0.11+)
+  # - Set the correct CQL table fields
+  # - Set a much smaller gc_grace_seconds than the default (6hrs vs 10 days)
+  if ts_table:
+    kw_options.update({'compaction_strategy': 'DateTieredCompactionStrategy',
+                       'compaction_strategy_options': {'timestamp_resolution': 'MILLISECONDS',
+                                                       'max_sstable_age_days': '365',
+                                                       'base_time_seconds': '60'},
+                       'comparator_type': pycassa_types.LongType(),
+                       'key_validation_class': pycassa_types.UTF8Type(),
+                       'default_validation_class': pycassa_types.FloatType(),
+                       'gc_grace_seconds': 10800})
+
   sys_manager.create_column_family(
       keyspace,
       tablename,
-      super=False,
-      comparator_type=pycassa_types.UTF8Type(),
-      key_validation_class=pycassa_types.UTF8Type(),
-      default_validation_class=pycassa_types.UTF8Type()
+      **kw_options
   )
