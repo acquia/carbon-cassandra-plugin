@@ -333,7 +333,9 @@ class DataTree(object):
 
       def _get(query):
         try:
-          cols = self.cfCache.get(cfName).get(query)
+          # Pycassa defaults to returning 100 columns without an explicit limit.
+          # This unreasonably large value is a HACK to let us fetch columns without having to page.
+          cols = self.cfCache.get(cfName).get(query, column_count=1999999999)
         except (NotFoundException):
           pass
         else:
