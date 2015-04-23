@@ -1286,15 +1286,27 @@ def createUTF8ColumnFamily(sys_manager, keyspace, tablename, ts_table=False):
   # - Use DTCS compaction to delete old data (requires 2.0.11+)
   # - Set the correct CQL table fields
   # - Set a much smaller gc_grace_seconds than the default (6hrs vs 10 days)
+  # - DTCS options:
+  #   - timestamp_resolution: MICROSECONDS due to Pycassa and CQL's default timestamp resolution
+  #   - tombstone_threhold: 0.1 as an attempt to be more aggressive when it comes to compaction
+  #   - base_time_seconds: 60 groups sstables into 60 second blocks
+  #     CASSANDRA-8417 indicates that 60 seconds is a more reasonable default
+  #   - tombstone_compaction_interval: 1 is a Cassandra default. Included in case it needs tuning
   if ts_table:
-    kw_options.update({'compaction_strategy': 'DateTieredCompactionStrategy',
-                       'compaction_strategy_options': {'timestamp_resolution': 'MILLISECONDS',
-                                                       'max_sstable_age_days': '365',
-                                                       'base_time_seconds': '60'},
-                       'comparator_type': pycassa_types.LongType(),
-                       'key_validation_class': pycassa_types.UTF8Type(),
-                       'default_validation_class': pycassa_types.FloatType(),
-                       'gc_grace_seconds': 10800})
+    table_options = {
+        'compaction_strategy': 'DateTieredCompactionStrategy',
+        'compaction_strategy_options': {
+          'timestamp_resolution': 'MICROSECONDS',
+          'max_sstable_age_days': '365',
+          'tombstone_compaction_interval': '1',
+          'tombstone_threshold': '0.1',
+          'base_time_seconds': '60'},
+        'comparator_type': pycassa_types.LongType(),
+        'key_validation_class': pycassa_types.UTF8Type(),
+        'default_validation_class': pycassa_types.FloatType(),
+        'gc_grace_seconds': 10800}
+
+    kw_options.update(table_options)
 
   sys_manager.create_column_family(
       keyspace,
