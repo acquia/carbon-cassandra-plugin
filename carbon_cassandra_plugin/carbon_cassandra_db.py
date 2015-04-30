@@ -333,13 +333,12 @@ class DataTree(object):
 
       def _get(query):
         try:
-          # Pycassa defaults to returning 100 columns without an explicit limit.
-          # This unreasonably large value is a HACK to let us fetch columns without having to page.
-          cols = self.cfCache.get(cfName).get(query, column_count=1999999999)
+          # Using xget() over get() because it pages over columns in buffer_size sized buckets.
+          cols = self.cfCache.get(cfName).xget(query, buffer_size=1000)
         except (NotFoundException):
           pass
         else:
-          for col, value in cols.iteritems():
+          for col, value in cols:
             yield (query, col, value)
 
       def _query_parts_helper(query):
@@ -969,17 +968,14 @@ class DataSlice(object):
 
     key = self.nodePath
     tsCF = self.cfCache.getTS("ts{0}".format(self.timeStep))
-    #TODO: VERY BAD code here to request call columns
-    #get the columns in sensible buckets
     try:
-      cols = tsCF.get(key, column_start=fromTime,
+      cols = list(tsCF.xget(key, column_start=fromTime,
                           column_finish=untilTime,
-                          column_count=1999999999)
+                          buffer_size=1000))
     except (NotFoundException) as e:
       raise NoData()
 
-    return TimeSeriesData.fromDB(fromTime, untilTime, self.timeStep,
-      cols.items())
+    return TimeSeriesData.fromDB(fromTime, untilTime, self.timeStep, cols)
 
   def insert_metric(self, metric, isMetric=False, batch=None):
     """Insert the ``metric`` into the global_nodes CF to say it's a
