@@ -1283,7 +1283,7 @@ def createUTF8ColumnFamily(sys_manager, keyspace, tablename, ts_table=False):
   # the actual data is going to be stored
   # - Use DTCS compaction to delete old data (requires 2.0.11+)
   # - Set the correct CQL table fields
-  # - Set a much smaller gc_grace_seconds than the default (6hrs vs 10 days)
+  # - Set gc_grace_seconds to 0 since we never update/delete data once it's written
   # - DTCS options:
   #   - timestamp_resolution: MICROSECONDS due to Pycassa and CQL's default timestamp resolution
   #   - tombstone_threhold: 0.1 as an attempt to be more aggressive when it comes to compaction
@@ -1302,7 +1302,7 @@ def createUTF8ColumnFamily(sys_manager, keyspace, tablename, ts_table=False):
         'comparator_type': pycassa_types.LongType(),
         'key_validation_class': pycassa_types.UTF8Type(),
         'default_validation_class': pycassa_types.FloatType(),
-        'gc_grace_seconds': 10800}
+        'gc_grace_seconds': 0}
 
     kw_options.update(table_options)
 
