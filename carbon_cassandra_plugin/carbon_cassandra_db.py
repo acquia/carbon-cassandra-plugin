@@ -710,8 +710,18 @@ class DataNode(object):
 
       # if the requested interval starts after the start of this slice
       if fromTime >= dataSlice.startTime:
+        # Read only within the current slice, to avoid redundant datapoints.
+        # If data is requested over the interval [May 6 19:18:07 2015, May 11 09:18:07 2015]
+        # read over [May 11 06:18:00 2015, May 11 09:18:10 2015]
+        # and       [May  6 19:19:00 2015, May 11 06:18:00 2015]
+        # with sliceboundary at May 11 06:18:00 2015
+        if (sliceBoundary is not None):
+          requestUntilTime = sliceBoundary
+        else:
+          requestUntilTime = untilTime
+
         try:
-          series = dataSlice.read(fromTime, untilTime)
+          series = dataSlice.read(fromTime , requestUntilTime)
         except NoData:
           # amorton: changed from break to continue
           # so that if the slice has no data we look at the next slice
