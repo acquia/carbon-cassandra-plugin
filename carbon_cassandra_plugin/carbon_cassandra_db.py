@@ -1312,7 +1312,7 @@ def createUTF8ColumnFamily(sys_manager, keyspace, tablename, ts_table=False):
         'comparator_type': pycassa_types.LongType(),
         'key_validation_class': pycassa_types.UTF8Type(),
         'default_validation_class': pycassa_types.FloatType(),
-        'gc_grace_seconds': 0}
+        'gc_grace_seconds': '1800'}
 
     kw_options.update(table_options)
 
